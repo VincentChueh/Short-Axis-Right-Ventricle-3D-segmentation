@@ -4,13 +4,16 @@ import torch
 import nibabel as nib
 import os
 import torch
-from PIL import Image
 from torch.utils.data import Dataset
 import numpy as np
 from PIL import Image
+from torch.utils.data.dataloader import DataLoader
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim.lr_scheduler
 import torchio as tio
 
-    
+
 class MyDataset(Dataset):
     def __init__(self,image_dir,mask_dir,transform=None,train_mode=True):
         self.image_dir=image_dir
@@ -38,22 +41,33 @@ class MyDataset(Dataset):
         reshape = tio.transforms.CropOrPad((8, 224, 224))
         image = reshape(image)
         mask = reshape(mask)
-
-        #normalization
-        norm=tio.transforms.ZNormalization()
-        image=norm(image)
-        #mask=norm(mask)
-
+        
         if self.train_mode ==True:
-            #elastic_deform = tio.transforms.RandomElasticDeformation(num_control_points=(4,4,4), locked_borders=1,)
-            #image=elastic_deform(image)
-            #mask=elastic_deform(mask)
+            #clamp
+            clamp = tio.Clamp(out_min=-300, out_max=300,p=1)
+            image=clamp(image)
+        
+            #resample
+            resample = tio.Resample((1,1,1),p=0.5)
+            image=resample(image)
 
-            #flip=tio.transforms.RandomFlip(axes=('Left',))
-            #image=flip(image)
-            #mask=flip(mask)
-            pass
+            #blur
+            blur=tio.transforms.RandomBlur(std=(0,2),p=1)
+            image=blur(image)
+        
+            #noise
+            noise=tio.transforms.RandomNoise(mean=0,std=(0,80),p=1)
+            image=noise(image)
+            
+            #normalization
+            norm=tio.transforms.ZNormalization()
+            image=norm(image)       
+       
         else:
-            pass
+            #normalization
+            norm=tio.transforms.ZNormalization()
+            image=norm(image)
+
+
         mask=mask.squeeze(dim=0)
         return image,mask
